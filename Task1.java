@@ -6,21 +6,36 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class Task1 {
+
     public static void main(String[] args) {
+        String csvFilePath = "VAERS_COVID_DataDecember2024.csv";
+        int degree = 3;
+        String treeDir = "/Users/sushoonleikhaing/Desktop/365/Covid19/src/project2/tree";
+
         try {
-            BufferedReader reader = new BufferedReader(new FileReader("VAERS_COVID_DataDecember2024.csv", StandardCharsets.UTF_8));
-            CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader());
+            System.out.println("Step 1: Building in-memory B+ tree with IDs...");
 
-            Iterator<CSVRecord> iterator = csvParser.iterator();
+            BufferedReader reader1 = new BufferedReader(new FileReader(csvFilePath, StandardCharsets.UTF_8));
+            CSVParser parser1 = new CSVParser(reader1, CSVFormat.DEFAULT.withFirstRecordAsHeader());
 
-            System.out.println("Starting CSV parsing...");
+            BPlusTree tree = new BPlusTree(degree);
+            int recordIndex = 0;
 
-            BPlusTree tree = new BPlusTree(3); // Single tree
-            Map<String, Record> allRecords = new HashMap<>();
+            for (CSVRecord record : parser1) {
+                String vaersId = record.get("VAERS_ID").trim();
+                tree.insert(vaersId, recordIndex++);
+            }
 
-            int index = 0;
-            while (iterator.hasNext()) {
-                CSVRecord record = iterator.next();
+            parser1.close();
+            System.out.println("Indexed " + recordIndex + " records.");
+
+            // Step 2: Write full records to disk using B+ Tree routing
+            System.out.println("Step 2: Writing full records to folder structure...");
+
+            BufferedReader reader2 = new BufferedReader(new FileReader(csvFilePath, StandardCharsets.UTF_8));
+            CSVParser parser2 = new CSVParser(reader2, CSVFormat.DEFAULT.withFirstRecordAsHeader());
+
+            for (CSVRecord record : parser2) {
                 String vaersId = record.get("VAERS_ID").trim();
 
                 Record rec = new Record(
@@ -36,47 +51,18 @@ public class Task1 {
                         record.get("SYMPTOM2")
                 );
 
-                allRecords.put(vaersId, rec);
-                tree.insert(vaersId, Integer.parseInt(vaersId));
+                // Use the updated path generation method
+                String folderPath = DiskTreePathBuilder.getPath(tree, vaersId);
+                File dir = new File(treeDir + "/" + folderPath);
+                dir.mkdirs();
 
-                index++;
-                if (index % 10000 == 0) {
-                    System.out.println("  Processed " + index + " records");
+                try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(new File(dir, vaersId + ".dat")))) {
+                    out.writeObject(rec);
                 }
             }
 
-            // Save to disk (single files)
-            System.out.println("Serializing full BPlusTree...");
-            try (ObjectOutputStream treeOut = new ObjectOutputStream(new FileOutputStream("tree_full.dat"))) {
-                treeOut.writeObject(tree);
-            }
-
-            System.out.println("Serializing all records...");
-            try (ObjectOutputStream recordOut = new ObjectOutputStream(new FileOutputStream("records_full.dat"))) {
-                recordOut.writeObject(allRecords);
-            }
-
-
-            System.out.println("All data processed and saved to disk.");
-
-            // Search logic
-            Scanner sc = new Scanner(System.in);
-            System.out.print("Enter VAERS_ID to search: ");
-            String searchKey = sc.nextLine();
-
-            try (ObjectInputStream treeIn = new ObjectInputStream(new FileInputStream("tree_full.dat"))) {
-                BPlusTree loadedTree = (BPlusTree) treeIn.readObject();
-                Integer key = loadedTree.search(searchKey);
-                if (key != null) {
-                    try (ObjectInputStream recordIn = new ObjectInputStream(new FileInputStream("records_full.dat"))) {
-                        Map<String, Record> loadedRecords = (Map<String, Record>) recordIn.readObject();
-                        System.out.println("Found record:");
-                        System.out.println(loadedRecords.get(searchKey));
-                    }
-                } else {
-                    System.out.println("Record not found.");
-                }
-            }
+            parser2.close();
+            System.out.println("Finished writing all records.");
 
         } catch (Exception e) {
             e.printStackTrace();
