@@ -1,6 +1,6 @@
 package project2;
 
-import java.io.Serializable;
+import java.io.*;
 import java.util.*;
 
 public class BPlusTree implements Serializable {
@@ -8,13 +8,18 @@ public class BPlusTree implements Serializable {
     private final int maxDegree;
     private Node root;
 
+    public BPlusTree(int degree) {
+        if (degree < 3) throw new IllegalArgumentException("Degree must be at least 3.");
+        this.maxDegree = degree;
+        this.root = new Node(true);
+    }
 
     public static class Node implements Serializable {
         private static final long serialVersionUID = 1L;
         boolean isLeaf;
-        ArrayList<String> keys;
-        ArrayList<Node> children; // for internal nodes
-        ArrayList<Integer> values; // for leaf nodes
+        List<String> keys;
+        List<Node> children;
+        List<Integer> values;
 
         Node(boolean isLeaf) {
             this.isLeaf = isLeaf;
@@ -24,9 +29,8 @@ public class BPlusTree implements Serializable {
         }
     }
 
-    public BPlusTree(int degree) {
-        this.maxDegree = degree;
-        this.root = new Node(true);
+    public Node getRoot() {
+        return root;
     }
 
     public void insert(String key, int value) {
@@ -42,7 +46,7 @@ public class BPlusTree implements Serializable {
 
     private void insertNonFull(Node node, String key, int value) {
         int i = Collections.binarySearch(node.keys, key);
-        if (i >= 0) return; // skip duplicate
+        if (i >= 0) return;
         i = -i - 1;
 
         if (node.isLeaf) {
